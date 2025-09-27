@@ -1,4 +1,5 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useState } from "react";
+import { Navigate } from "react-router-dom";
 import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
@@ -42,11 +43,9 @@ export function useAuth() {
   return useContext(AuthCtx);
 }
 
-// Guard
-import { Navigate } from "react-router-dom";
 export function RequireAuth({ children }) {
   const { user, loading } = useAuth();
-  if (loading) return null;            // or a spinner
+  if (loading) return null;               // or a spinner
   if (!user) return <Navigate to="/login" replace />;
   return children;
 }
