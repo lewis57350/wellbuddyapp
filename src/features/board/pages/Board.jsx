@@ -1,172 +1,232 @@
+// src/features/board/pages/Board.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
-import { db, auth, ensureAnonSignIn } from "../../../shared/firebase.js";
+import { db, auth } from "../../../shared/firebase.js";
+import { signInAnonymously } from "firebase/auth";
+import {
+  collection,
+  addDoc,
+  serverTimestamp,
+  query,
+  orderBy,
+  onSnapshot,
+  updateDoc,
+  deleteDoc,
+  doc,
+  limit as qLimit,
+} from "firebase/firestore";
 import { getProfile } from "../../profile/lib/profile.js";
 import { getWells } from "../../wells/lib/storage.js";
-import {
-  collection, addDoc, serverTimestamp, onSnapshot,
-  query, where, orderBy, limit, updateDoc, deleteDoc, doc
-} from "firebase/firestore";
 
-function orgSlug(name) {
-  const s = (name || "public").toLowerCase().replace(/[^a-z0-9]+/g, "-");
-  return s.replace(/(^-|-$)/g, "") || "public";
+function useQueryParam() {
+  const { search } = useLocation();
+  return useMemo(() => new URLSearchParams(search), [search]);
 }
-function makeChannelId(kind, wellId) {
-  return kind === "well" && wellId ? `well:${wellId}` : "org";
+
+async function ensureAnon() {
+  try {
+    if (auth.currentUser) return auth.currentUser;
+    const cred = await signInAnonymously(auth);
+    return cred.user ?? null;
+  } catch (e) {
+    console.warn("Anonymous sign-in failed:", e);
+    return null;
+  }
 }
 
 export default function Board() {
-  const profile = getProfile();
-  const orgId = orgSlug(profile.companyName);
-  const loc = useLocation();
-
   const wells = useMemo(() => getWells(), []);
-  const [user, setUser] = useState(null);
-  const [name, setName] = useState(localStorage.getItem("wb_board_name") || "");
+  const qp = useQueryParam();
+  const initialChannel = qp.get("channel") || "general";
+
+  const [channel, setChannel] = useState(initialChannel);
+  const [messages, setMessages] = useState([]);
   const [text, setText] = useState("");
+  const [posting, setPosting] = useState(false);
 
-  // channel selection
-  const urlWell = new URLSearchParams(loc.search).get("well") || "";
-  const [mode, setMode] = useState(urlWell ? "well" : "org");   // "org" | "well"
-  const [wellId, setWellId] = useState(urlWell || (wells[0]?.id || ""));
-  const channelId = makeChannelId(mode, wellId);
+  const myProfile = getProfile(); // {companyName, displayName, logoUrl, ...}
 
-
-  // subscribe last 100 for this org (client-filter by channel)
-  const [rows, setRows] = useState([]);
+  // Live subscription (download latest 200; we filter channel on client to avoid Firestore index requirement)
   useEffect(() => {
-    const qy = query(
-      collection(db, "messages"),
-      where("orgId", "==", orgId),
+    const q = query(
+      collection(db, "boardMessages"),
       orderBy("createdAt", "desc"),
-      limit(100)
+      qLimit(200)
     );
-    const unsub = onSnapshot(qy, snap => {
-      const arr = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      setRows(arr);
+    const unsub = onSnapshot(q, (snap) => {
+      setMessages(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
     });
-    return unsub;
-  }, [orgId]);
+    return () => unsub();
+  }, []);
 
-  // filter & sort (pinned first, then newest)
-  const msgs = useMemo(() => {
-    const filtered = rows.filter(m => (m.channelId || "org") === channelId);
-    const withTime = filtered.map(m => ({
-      ...m,
-      _ts: m.createdAt?.toDate ? m.createdAt.toDate().getTime() : 0
-    }));
-    withTime.sort((a, b) => {
-      const ap = !!a.pinned, bp = !!b.pinned;
-      if (ap !== bp) return ap ? -1 : 1;
-      return b._ts - a._ts;
-    });
-    return withTime;
-  }, [rows, channelId]);
+  // Sign in (anonymous) once so we can write
+  useEffect(() => {
+    ensureAnon();
+  }, []);
 
-  async function post(e) {
-    e.preventDefault();
-    const body = text.trim();
-    const display = (name || "").trim() || "Anon";
-    if (!body) return;
-    localStorage.setItem("wb_board_name", display);
-    const u = auth.currentUser || await ensureAnonSignIn();
-    await addDoc(collection(db, "messages"), {
-      orgId,
-      channelId,          // "org" or "well:<id>"
-      wellId: mode === "well" ? wellId : "",
-      body,
-      authorId: u.uid,
-      authorName: display,
-      createdAt: serverTimestamp(),
-      pinned: false
-    });
-    setText("");
+  const visible = useMemo(() => {
+    const list = messages.filter((m) => (m.channel || "general") === channel);
+    const pinned = list.filter((m) => !!m.pinned);
+    const regular = list.filter((m) => !m.pinned);
+    return [...pinned, ...regular];
+  }, [messages, channel]);
+
+  async function postMessage(e) {
+    e?.preventDefault?.();
+    if (!text.trim()) return;
+    setPosting(true);
+    try {
+      await ensureAnon();
+      const user = auth.currentUser;
+      await addDoc(collection(db, "boardMessages"), {
+        text: text.trim(),
+        channel,
+        pinned: false,
+        createdAt: serverTimestamp(),
+        byUid: user?.uid || null,
+        byName:
+          myProfile?.displayName ||
+          myProfile?.companyName ||
+          "Anonymous",
+        company: myProfile?.companyName || null,
+        wellId: channel.startsWith("well:") ? channel.slice(5) : null,
+      });
+      setText("");
+    } catch (err) {
+      alert("Failed to post message. Check console.");
+      console.error(err);
+    } finally {
+      setPosting(false);
+    }
   }
 
-  async function pinToggle(m) {
-    const u = auth.currentUser || await ensureAnonSignIn();
-    if (!u) return;
-    await updateDoc(doc(db, "messages", m.id), { pinned: !m.pinned });
+  async function togglePin(m) {
+    try {
+      await updateDoc(doc(db, "boardMessages", m.id), { pinned: !m.pinned });
+    } catch (e) {
+      console.error(e);
+      alert("Could not toggle pin.");
+    }
   }
 
   async function remove(m) {
-    const u = auth.currentUser;
-    if (!u || u.uid !== m.authorId) return alert("You can only delete your own message.");
     if (!confirm("Delete this message?")) return;
-    await deleteDoc(doc(db, "messages", m.id));
+    try {
+      await deleteDoc(doc(db, "boardMessages", m.id));
+    } catch (e) {
+      console.error(e);
+      alert("Could not delete.");
+    }
   }
+
+  const allChannels = useMemo(() => {
+    const base = [{ id: "general", label: "General (Company-wide)" }];
+    const wellCh = wells.map((w) => ({
+      id: `well:${w.id}`,
+      label: `Well • ${w.name}`,
+    }));
+    return [...base, ...wellCh];
+  }, [wells]);
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold">Message Board</h2>
-        <div className="text-xs opacity-70">
-          Org: <b>{orgId}</b> · Channel: <b>{channelId}</b> (last 100)
+      <header className="flex flex-wrap items-center gap-2 justify-between">
+        <div className="flex items-center gap-2">
+          <div className="font-semibold">Message Board</div>
+          {myProfile?.companyName && (
+            <div className="text-sm text-gray-600">
+              · {myProfile.companyName}
+            </div>
+          )}
         </div>
-      </div>
 
-      {/* Channel picker */}
-      <div className="card flex flex-col gap-2 sm:flex-row sm:items-center">
-        <label className="flex items-center gap-2">
-          <input type="radio" name="mode" value="org"
-            checked={mode === "org"} onChange={() => setMode("org")} />
-          Company-wide
-        </label>
-        <label className="flex items-center gap-2">
-          <input type="radio" name="mode" value="well"
-            checked={mode === "well"} onChange={() => setMode("well")} />
-          Per Well
-        </label>
-        {mode === "well" && (
-          <select className="border rounded-md px-2 py-1"
-            value={wellId} onChange={(e)=>setWellId(e.target.value)}>
-            {wells.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+        <div className="flex items-center gap-2">
+          <label className="text-sm">Channel:</label>
+          <select
+            className="border rounded-md px-2 py-1 text-sm"
+            value={channel}
+            onChange={(e) => setChannel(e.target.value)}
+          >
+            {allChannels.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.label}
+              </option>
+            ))}
           </select>
-        )}
-      </div>
+        </div>
+      </header>
 
-      {/* Composer */}
-      <form onSubmit={post} className="card flex flex-col sm:flex-row gap-2">
-        <input className="border rounded-md px-3 py-2 w-full sm:w-56"
-          placeholder="Your name" maxLength={40}
-          value={name} onChange={(e)=>setName(e.target.value)} />
-        <input className="border rounded-md px-3 py-2 flex-1"
-          placeholder="Ask a question or leave a note… (max 500 chars)" maxLength={500}
-          value={text} onChange={(e)=>setText(e.target.value)} />
-        <button className="btn btn-primary">Post</button>
+      <form onSubmit={postMessage} className="card space-y-2">
+        <div className="font-medium">Ask a question / Leave a message</div>
+        <textarea
+          rows={3}
+          className="w-full border rounded-md px-3 py-2"
+          placeholder="Type your message…"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+        />
+        <div className="flex items-center justify-between">
+          <div className="text-xs text-gray-500">
+            Posting as:{" "}
+            {myProfile?.displayName ||
+              myProfile?.companyName ||
+              "Anonymous"}
+          </div>
+          <button className="btn btn-primary" disabled={posting}>
+            {posting ? "Posting…" : "Post"}
+          </button>
+        </div>
       </form>
 
-      {/* Messages */}
-      <div className="space-y-2">
-        {msgs.map(m => (
-          <div key={m.id} className={`card ${m.pinned ? "ring-2 ring-amber-400" : ""}`}>
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <div className="text-sm font-semibold truncate">
-                  {m.authorName || "Anon"}
+      <section className="card">
+        <div className="font-medium mb-2">Messages</div>
+        {visible.length === 0 ? (
+          <div className="text-sm text-gray-600">No messages yet.</div>
+        ) : (
+          <ul className="space-y-2">
+            {visible.map((m) => (
+              <li
+                key={m.id}
+                className={`border rounded-md p-3 text-sm ${
+                  m.pinned ? "bg-yellow-50 dark:bg-yellow-900/20" : ""
+                }`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="font-medium break-words whitespace-pre-wrap">
+                      {m.text}
+                    </div>
+                    <div className="text-xs text-gray-500 mt-1">
+                      {m.byName || "Anonymous"} ·{" "}
+                      {m.createdAt?.toDate
+                        ? m.createdAt.toDate().toLocaleString()
+                        : "pending…"}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      className="btn btn-outline btn-xs"
+                      onClick={() => togglePin(m)}
+                      title={m.pinned ? "Unpin" : "Pin"}
+                    >
+                      {m.pinned ? "Unpin" : "Pin"}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-outline btn-xs"
+                      onClick={() => remove(m)}
+                      title="Delete"
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </div>
-                <div className="text-xs opacity-70">
-                  {m.createdAt?.toDate ? m.createdAt.toDate().toLocaleString() : "…"}
-                  {m.wellId ? <> · Well: <b>{m.wellId}</b></> : null}
-                </div>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <button className="btn btn-outline btn-xs" onClick={() => pinToggle(m)}>
-                  {m.pinned ? "Unpin" : "Pin"}
-                </button>
-                {auth.currentUser?.uid === m.authorId && (
-                  <button className="btn btn-outline btn-xs" onClick={() => remove(m)}>
-                    Delete
-                  </button>
-                )}
-              </div>
-            </div>
-            <div className="mt-2 whitespace-pre-wrap break-words">{m.body}</div>
-          </div>
-        ))}
-        {!msgs.length && <div className="card opacity-70">No messages yet.</div>}
-      </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
     </div>
   );
 }
