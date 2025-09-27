@@ -32,8 +32,6 @@ export default function Board() {
   const [wellId, setWellId] = useState(urlWell || (wells[0]?.id || ""));
   const channelId = makeChannelId(mode, wellId);
 
-  // sign in anon once
-  useEffect(() => { ensureAnonSignIn().then(setUser); }, []);
 
   // subscribe last 100 for this org (client-filter by channel)
   const [rows, setRows] = useState([]);
