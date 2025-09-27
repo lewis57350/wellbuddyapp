@@ -1,47 +1,42 @@
 ﻿import React, { createContext, useContext, useEffect, useState } from "react";
-import { Navigate } from "react-router-dom";
 import {
+  auth,
   onAuthStateChanged,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
+  signInAnonymously,
+  updateProfile,
   signOut,
-  signInWithPopup,
-} from "firebase/auth";
-import { auth, googleProvider } from "./firebase";
+} from "./firebase.js";
 
 const AuthCtx = createContext(null);
-
-export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (u) => {
-      setUser(u || null);
-      setLoading(false);
-    });
-    return () => unsub();
-  }, []);
-
-  const value = {
-    user,
-    loading,
-    signInEmail: (email, pass) => signInWithEmailAndPassword(auth, email, pass),
-    signUpEmail: (email, pass) => createUserWithEmailAndPassword(auth, email, pass),
-    signInGoogle: () => signInWithPopup(auth, googleProvider),
-    signOut: () => signOut(auth),
-  };
-
-  return <AuthCtx.Provider value={value}>{children}</AuthCtx.Provider>;
-}
 
 export function useAuth() {
   return useContext(AuthCtx);
 }
 
-export function RequireAuth({ children }) {
-  const { user, loading } = useAuth();
-  if (loading) return null;
-  if (!user) return <Navigate to="/login" replace />;
-  return children;
+export default function AuthProvider({ children }) {
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() =>
+    onAuthStateChanged(auth, (u) => {
+      setUser(u || null);
+      setLoading(false);
+    }), []);
+
+  const value = {
+    user,
+    loading,
+    login: (email, pass) => signInWithEmailAndPassword(auth, email, pass),
+    signup: async (email, pass, displayName) => {
+      const cred = await createUserWithEmailAndPassword(auth, email, pass);
+      if (displayName) await updateProfile(cred.user, { displayName });
+      return cred.user;
+    },
+    guest: () => signInAnonymously(auth),
+    logout: () => signOut(auth),
+  };
+
+  return <AuthCtx.Provider value={value}>{children}</AuthCtx.Provider>;
 }
