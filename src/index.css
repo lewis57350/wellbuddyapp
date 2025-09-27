@@ -1,0 +1,147 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ---------- Base ---------- */
+:root { color-scheme: light dark; }
+html, body, #root { height: 100%; }
+
+body {
+  /* readable text + smoothing */
+  @apply text-gray-900 antialiased;
+
+  /* base color for older browsers */
+  background-color: #f8fafc;
+
+  /* soft layered gradients */
+  background-image:
+    radial-gradient(900px 450px at 10% -10%, rgba(59,130,246,0.08), transparent 70%),
+    radial-gradient(900px 450px at 110% 10%, rgba(16,185,129,0.08), transparent 70%),
+    linear-gradient(180deg, #f8fafc, #f1f5f9);
+  background-attachment: fixed;
+  background-repeat: no-repeat;
+  background-size: cover;
+}
+
+/* Optional grid overlay (requires /public/bg-grid.svg) */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background: url("/bg-grid.svg") center / 48px 48px repeat;
+  opacity: .35;
+  pointer-events: none;
+}
+
+@media print {
+  body { background: #fff !important; }
+  body::before { display: none !important; }
+}
+
+/* ---------- Theming (Oilfield) ---------- */
+/* Light oilfield */
+:root[data-theme="oil"] {
+  --surface: #f7f4f1;
+  --surface-contrast: #111111;
+  --border: #e5ddd3;
+  --ring: rgba(122,29,29,.35); /* brand-600 */
+  --accent: #b45309;           /* rust */
+  --brand:  #7a1d1d;           /* maroon */
+}
+
+/* Dark oilfield */
+:root[data-theme="oil-dark"] {
+  --surface: #0b1220;          /* diesel */
+  --surface-contrast: #e7d7c5; /* sand */
+  --border: #273043;
+  --ring: rgba(250,204,21,.25);
+  --accent: #f59e0b;
+  --brand:  #7a1d1d;
+}
+
+/* When a theme is active, tint the background with the theme vars */
+:root[data-theme="oil"] body,
+:root[data-theme="oil-dark"] body {
+  background-color: var(--surface);
+  background-image:
+    radial-gradient(900px 450px at 10% -10%, rgba(122,29,29,.08), transparent 70%),
+    radial-gradient(900px 450px at 110% 10%, rgba(180,83,9,.08), transparent 70%),
+    linear-gradient(180deg, rgba(255,255,255,.6), transparent),
+    url("/bg-grid.svg");
+  background-attachment: fixed;
+  background-repeat: repeat;
+  background-size: cover, cover, cover, 48px 48px;
+  color: var(--surface-contrast);
+}
+
+/* ---------- Common UI helpers ---------- */
+a { color: var(--accent, #2563eb); }
+
+/* Buttons */
+.btn {
+  @apply inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium;
+}
+.btn-primary {
+  color: #fff;
+  background-color: var(--brand, #111827);
+}
+.btn-primary:hover { filter: brightness(0.92); }
+.btn-outline {
+  @apply bg-white;
+  border: 1px solid var(--border, rgb(229 231 235));
+}
+.btn-outline:hover { @apply bg-gray-50; }
+.btn-xs { @apply px-2 py-1 text-xs; }
+
+/* Card */
+.card {
+  @apply rounded-xl p-4 shadow-sm;
+  border: 1px solid var(--border, rgb(229 231 235));
+  background-color: var(--surface, #ffffff);
+  color: var(--surface-contrast, #111827);
+}
+.card:hover { @apply shadow; }
+
+/* Themed surface wrapper (e.g., navbar) */
+.surface {
+  background-color: var(--surface, #ffffff);
+  color: var(--surface-contrast, #111827);
+}
+
+/* Strong text option for cards */
+.card-strong {
+  color: var(--surface-contrast, #0f172a);
+  font-weight: 700;
+}
+.card-strong a { color: inherit; }
+
+/* Full-page photo background */
+body {
+  background-color: #0b0f14;               /* fallback color */
+  background-image: url("/bg-site.jpg");   /* your image */
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  /* Avoid 'fixed' on iOS (janky). If you really want parallax, add it only on large screens. */
+}
+
+/* Optional: subtle tint for readability over the whole page */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(80rem 40rem at 50% -10%, rgba(0,0,0,.55), transparent 70%),
+              linear-gradient(to bottom, rgba(0,0,0,.35), rgba(0,0,0,.15) 40%, rgba(255,255,255,.55));
+}
+
+/* Print stays clean */
+@media print {
+  body { background: #fff !important; }
+  body::before { display: none !important; }
+}
+
+/* If you want parallax on desktops only */
+@media (min-width: 1024px) {
+  body { background-attachment: fixed; }
+}
