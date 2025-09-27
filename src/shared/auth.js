@@ -31,9 +31,13 @@ export function AuthProvider({ children }) {
     signOut: () => signOut(auth),
   };
 
-  return <AuthCtx.Provider value={value}>{children}</AuthCtx.Provider>;
-}
 
+return (
+  <AuthCtx.Provider value={value}>
+    {children}
+  </AuthCtx.Provider>
+);
+}
 export function useAuth() {
   return useContext(AuthCtx);
 }
