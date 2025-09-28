@@ -1,353 +1,320 @@
 import React, { useMemo, useState } from "react";
-import { addWell, addRecord, getWells } from "../../wells/lib/storage.js";
+import Tesseract from "tesseract.js";
+import {
+  getWells,
+  getWell,
+  addWell,
+  updateWell,
+  addRecord,
+  seedIfEmpty,
+} from "../../wells/lib/storage.js";
+
+/* -------------------- utilities -------------------- */
+
+function norm(s = "") {
+  return s.toLowerCase().replace(/[^\w]+/g, "").trim();
+}
+
+function slugify(s = "") {
+  return s
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "")
+    .slice(0, 24);
+}
+
+function first(a, b) {
+  return a ?? b ?? "";
+}
+
+function trimMulti(s) {
+  return s.replace(/[ \t]+/g, " ").replace(/\s+\n/g, "\n").trim();
+}
+
+/** Build a short record note from description lines */
+function shortNotes(lines) {
+  const t = lines.join(" • ");
+  return t.length > 380 ? t.slice(0, 380) + "…" : t;
+}
+
+/* -------------------- OCR + parsing -------------------- */
 
 /**
- * You need tesseract.js in your project:
- *   npm i tesseract.js
+ * Try hard to pull a well name from the OCR text.
+ * Prioritizes the "WELL" section, then falls back to a decent guess.
  */
+function extractWellName(text) {
+  // 1) explicit section
+  const m1 = text.match(/^\s*WELL\s*\n+([^\n]+)$/im);
+  if (m1?.[1]) return m1[1].trim();
 
-function slug(s = "") {
-  return (s || "")
-    .toLowerCase()
-    .normalize("NFKD")
-    .replace(/["“”‘’]/g, "")    // quotes
-    .replace(/[\u2013\u2014]/g, "-") // en/em dash
-    .replace(/[^a-z0-9#\s-]/g, "")
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/(^-|-$)/g, "");
+  // 2) inline forms: "WELL: Name" or "WELL Name"
+  const m2 = text.match(/WELL[:\s-]+([A-Za-z0-9 #"'&/.-]{2,60})/i);
+  if (m2?.[1]) return m2[1].trim();
+
+  // 3) A line that looks like a well label (very naive fallback)
+  const line = (text.split("\n").map((s) => s.trim()).find((s) =>
+    /(?:#?\d+|unit|well)/i.test(s) && s.length < 60
+  )) || "";
+  return line || "";
 }
 
-function normalizeLine(s = "") {
-  return s.replace(/\s+/g, " ").trim();
+/**
+ * Pull the invoice date if present: lines like "DATE 02/19/2024"
+ */
+function extractDate(text) {
+  const m = text.match(/\bDATE[:\s]+(\d{1,2}\/\d{1,2}\/\d{4})\b/i);
+  return m?.[1] || "";
 }
 
-function toIsoDate(mdy) {
-  // 02/19/2024 -> 2024-02-19
-  const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(mdy);
-  if (!m) return "";
-  const [_, mm, dd, yyyy] = m;
-  return `${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`;
+/**
+ * Extract the itemized block under "CONTRACT WORK DESCRIPTION".
+ * If not found, return the top 8 non-empty lines as a fallback.
+ */
+function extractDescriptionLines(text) {
+  const lines = text.split("\n");
+  const idx = lines.findIndex((l) =>
+    /CONTRACT\s+WORK\s+DESCRIPTION/i.test(l)
+  );
+
+  if (idx >= 0) {
+    const out = [];
+    for (let i = idx + 1; i < lines.length; i++) {
+      const L = lines[i].trim();
+      // Stop when we reach totals or payment area
+      if (/^PAYMENT\b/i.test(L)) break;
+      if (/^\s*(HOURS|RATE|AMOUNT)\s*$/i.test(L)) continue;
+      if (/^\s*(BALANCE|TOTAL|SUBTOTAL|TAX)\b/i.test(L)) continue;
+      if (L) out.push(L);
+    }
+    if (out.length) return out;
+  }
+
+  // fallback
+  return lines
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .slice(0, 8);
 }
 
-function findExistingWellIdByName(name) {
-  const target = slug(name);
-  const wells = getWells();
-  // Try exact slug match first
-  let found = wells.find(w => slug(w.name) === target);
-  if (found) return found.id;
+/**
+ * Heuristic parser for rod/tubing/polish/liner/packing & insert pump.
+ * Returns a "general" patch and a "notes" fragment.
+ */
+function parseGeneralFromLines(lines) {
+  const txt = lines.join("\n");
 
-  // Try looser “contains” on words (handles e.g., Montgomery #3 "Highway Well")
-  const targetWords = target.split("-").filter(Boolean);
-  found = wells.find(w => {
-    const s = slug(w.name);
-    return targetWords.every(t => s.includes(t));
+  // ---- rods: "137 5/8's rods" | "54 x 3/4\" rods"
+  let rods;
+  let m =
+    txt.match(/(\d{1,4})\s*(?:x\s*)?([0-9]+(?:\/[0-9]+)?)["”']?\s*'?s?\s*rods?\b/i) ||
+    txt.match(/(\d{1,4})\s*(?:[’']?s)?\s*([0-9]+\/[0-9]+)["”']?\s*rods?\b/i) ||
+    txt.match(/(\d{1,4})\s*rods?\b/i);
+  if (m) {
+    const count = m[1];
+    const size = m[2];
+    rods = size ? `${count} x ${size}"` : `${count} rods`;
+  }
+
+  // ---- tubing: "109 joints 2\" tubing" | "120 joints 2-3/8\""
+  let tubing;
+  m =
+    txt.match(/(\d{1,4})\s*joints?\s*([0-9]+(?:-[0-9]+\/[0-9]+|\/[0-9]+)?)["”']?\s*tubing\b/i) ||
+    txt.match(/(\d{1,4})\s*joints?\s*([0-9.]+)["”']?\s*tubing\b/i);
+  if (m) {
+    tubing = `${m[1]} x ${m[2]}"`;
+  }
+
+  // ---- polish rods: "polish rod" with size and maybe length
+  let polishRods;
+  m =
+    txt.match(/polish\s*rod(?:s)?[^0-9]{0,10}([0-9]+(?:\/[0-9]+)?)["”]?\s*x?\s*([0-9]{1,3})[’'′]?\b/i) ||
+    txt.match(/([0-9]+(?:\/[0-9]+)?)["”]?\s*polish\s*rod/i);
+  if (m) {
+    const dia = m[1];
+    const len = m[2];
+    polishRods = dia && len ? `${dia}" x ${len}'` : `${dia}"`;
+  }
+
+  // ---- liner: "8' liner" or "8' x 1.75\" x 2.00\""
+  let linerSize;
+  m = txt.match(/(\d+)\s*[’'′]?\s*liner\b/i);
+  if (m) linerSize = `${m[1]}'`;
+  // fuller form
+  const mFull = txt.match(
+    /(\d+)\s*[’'′]?\s*x\s*([0-9.]+)["”]?\s*x\s*([0-9.]+)["”]?\s*liner/i
+  );
+  if (mFull) {
+    linerSize = `${mFull[1]}' x ${mFull[2]}" x ${mFull[3]}"`;
+  }
+
+  // ---- insert pump note: "9\" insert pump"
+  let extraNote = "";
+  m = txt.match(/(\d{1,2})\s*["”]?\s*insert\s*pump\b/i);
+  if (m) {
+    extraNote = `Insert pump ${m[1]}"`;
+    // If we have polishRods size only and no length, keep it
+    if (!polishRods) polishRods = `${m[1]}" (insert)`;
+  }
+
+  // ---- packing mentioned?
+  let packing = "";
+  if (/\bpacking\b/i.test(txt)) {
+    // find small phrase around first "packing"
+    const idx = txt.toLowerCase().indexOf("packing");
+    const window = txt.slice(Math.max(0, idx - 30), idx + 50);
+    packing = window.replace(/\n/g, " ").trim();
+    // keep it short
+    if (packing.length > 60) packing = "Packing / fittings noted";
+  }
+
+  const general = {};
+  if (rods) general.rods = rods;
+  if (tubing) general.tubing = tubing;
+  if (polishRods) general.polishRods = polishRods;
+  if (linerSize) general.linerSize = linerSize;
+  if (packing) general.packing = packing;
+
+  return { general, extraNote };
+}
+
+async function ocrFile(file) {
+  const { data } = await Tesseract.recognize(file, "eng", {
+    // Slightly more robust to typographic quotes
+    tessedit_char_whitelist:
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789#:/-.,()'\" \n",
   });
-  return found?.id || null;
+  return trimMulti(data.text || "");
 }
 
-function splitLines(text) {
-  return text
-    .split(/\r?\n/)
-    .map(normalizeLine)
-    .filter(Boolean);
-}
-
-/** Parse OCR text tailored to your invoice format */
-function parseInvoiceText(text) {
-  const lines = splitLines(text);
-  const joined = lines.join("\n");
-
-  // Invoice date
-  let date = "";
-  {
-    const m = /DATE\s+(\d{1,2}\/\d{1,2}\/\d{4})/i.exec(joined);
-    if (m) date = toIsoDate(m[1]);
-  }
-
-  // Well name: line after a line that equals "WELL" (OCR sometimes makes it “WELL.” or “WELL I”)
-  let wellName = "";
-  const iW = lines.findIndex(l => /^well\b\.?$/i.test(l) || /^well\b/i.test(l) && l.toLowerCase() === "well");
-  if (iW >= 0) {
-    // next non-empty line
-    for (let j = iW + 1; j < lines.length; j++) {
-      if (lines[j].trim()) {
-        wellName = lines[j].replace(/^well[:\-]\s*/i, "").replace(/^well\b/i, "").trim();
-        break;
-      }
-    }
-  }
-  if (!wellName) {
-    // fallback: header sometimes embeds it like "WELL Cur d"; try a simple pattern
-    const m = /\bWELL\b\s*([^\n]+)/i.exec(joined);
-    if (m) wellName = normalizeLine(m[1]);
-  }
-  // Clean quotes like Montgomery #3 “Highway Well”
-  wellName = wellName.replace(/[“”"]/g, '"').replace(/\s+"/g, ' "').replace(/"+\s*$/g, "").trim();
-
-  // Table section: between CONTRACT WORK DESCRIPTION and PAYMENT|BALANCE DUE|Thank you...
-  const startIdx = lines.findIndex(l => /CONTRACT WORK DESCRIPTION/i.test(l));
-  let endIdx = -1;
-  if (startIdx >= 0) {
-    endIdx = lines.findIndex((l, idx) =>
-      idx > startIdx &&
-      (/\bPAYMENT\b/i.test(l) || /\bBALANCE DUE\b/i.test(l) || /Thank you/i.test(l))
-    );
-    if (endIdx < 0) endIdx = lines.length;
-  }
-
-  const tableLines = startIdx >= 0 ? lines.slice(startIdx + 1, endIdx) : [];
-
-  // Build items (description may wrap; hours/rate/amount often at end)
-  const items = [];
-  let cur = null;
-
-  function flush() {
-    if (cur) {
-      cur.desc = cur.desc.trim();
-      items.push(cur);
-      cur = null;
-    }
-  }
-
-  const moneyRe = /(\$?\d{1,3}(?:,\d{3})*(?:\.\d{2})?)$/; // capture last money-like token
-  for (const raw of tableLines) {
-    const line = raw.trim();
-
-    // skip separators
-    if (/^[-._\s]{3,}$/.test(line)) continue;
-
-    // If line ends with amount, start/close an item
-    const mAmt = moneyRe.exec(line);
-    if (mAmt) {
-      const amountText = mAmt[1].replace(/^\$/, "");
-      const amount = parseFloat(amountText.replace(/,/g, "")) || 0;
-
-      // Try to pull HOURS and RATE columns if present (simple heuristics)
-      // We’ll strip the amount and then look for two numeric columns before it.
-      const left = line.slice(0, mAmt.index).trim();
-      // Split on two+ spaces – columns are spaced out
-      const cols = left.split(/\s{2,}/).map(s => s.trim()).filter(Boolean);
-
-      let hours = null, rate = null, desc = "";
-      if (cols.length >= 3) {
-        // Usually: [desc, hours, rate]
-        desc = cols.slice(0, cols.length - 2).join(" ");
-        hours = parseFloat(cols[cols.length - 2].replace(/,/g, "")) || null;
-        rate = parseFloat(cols[cols.length - 1].replace(/[$,]/g, "")) || null;
-      } else {
-        // Could be only desc, or desc + hours
-        desc = cols[0] || "";
-        if (cols.length === 2) {
-          const maybe = parseFloat(cols[1].replace(/,/g, ""));
-          if (!Number.isNaN(maybe)) hours = maybe;
-        }
-      }
-
-      flush();
-      cur = { desc, hours, rate, amount };
-      flush();
-      continue;
-    }
-
-    // Otherwise, it’s a wrapped description line—append to current desc
-    if (!cur) cur = { desc: line, hours: null, rate: null, amount: null };
-    else cur.desc += ` ${line}`;
-  }
-  flush();
-
-  // Pick up “Well record” block if present
-  let wellRecordLines = [];
-  {
-    const idx = lines.findIndex(l => /^well\s+record\b/i.test(l));
-    if (idx >= 0) {
-      for (let k = idx; k < Math.min(idx + 10, lines.length); k++) {
-        const s = lines[k].trim();
-        if (!s) break;
-        // stop at obvious next section lines
-        if (/^Fuel Surcharge/i.test(s) || /\bPAYMENT\b/i.test(s)) break;
-        if (k === idx) continue; // skip the title line itself
-        wellRecordLines.push(s);
-      }
-    }
-  }
-
-  const total = items.reduce((acc, it) => acc + (it.amount || 0), 0);
-
-  return {
-    wellName,
-    date,
-    items,
-    wellRecord: wellRecordLines.join("; "),
-    total
-  };
-}
+/* -------------------- component -------------------- */
 
 export default function InvoiceImport() {
-  const [files, setFiles] = useState([]);
+  const [queue, setQueue] = useState([]); // [{file, text, status}]
   const [busy, setBusy] = useState(false);
-  const [results, setResults] = useState([]); // [{fileName, parsed, text}]
+  useMemo(() => seedIfEmpty(), []);
 
-  async function runOcr(file) {
-    const url = URL.createObjectURL(file);
-    try {
-      const { createWorker } = await import("tesseract.js");
-      const worker = await createWorker("eng", 1, { logger: () => {} });
-      const { data } = await worker.recognize(url);
-      await worker.terminate();
-      URL.revokeObjectURL(url);
-      return data.text || "";
-    } catch (e) {
-      URL.revokeObjectURL(url);
-      throw e;
-    }
-  }
-
-  async function onSelect(e) {
-    const chosen = Array.from(e.target.files || []);
-    setFiles(chosen);
-    setResults([]);
-  }
-
-  async function process() {
+  async function onPick(e) {
+    const files = [...(e.target.files || [])];
     if (!files.length) return;
     setBusy(true);
-    const out = [];
+    const results = [];
     for (const f of files) {
       try {
-        const text = await runOcr(f);
-        const parsed = parseInvoiceText(text);
-        out.push({ fileName: f.name, parsed, text });
+        const text = await ocrFile(f);
+        results.push({ file: f, text, status: "ok" });
       } catch (err) {
-        out.push({ fileName: f.name, error: String(err) });
+        console.error("OCR failed:", err);
+        results.push({ file: f, text: "", status: "error" });
       }
     }
-    setResults(out);
+    setQueue(results);
     setBusy(false);
   }
 
-  function commitOne(parsed) {
-    const { wellName, date, items, total, wellRecord } = parsed;
-    if (!wellName) {
-      alert("No WELL found in OCR. Open preview, confirm text, and try again.");
-      return;
-    }
+  async function importAll() {
+    setBusy(true);
+    const wellsNow = getWells();
 
-    // Find or create well
-    let wellId = findExistingWellIdByName(wellName);
-    if (!wellId) {
-      const id = `well-${slug(wellName)}-${Date.now().toString().slice(-4)}`;
-      addWell({ id, name: wellName, location: "", pumpType: "Unknown", records: [] });
-      wellId = id;
-    }
+    for (const item of queue) {
+      if (!item.text) continue;
 
-    // Build a compact service note
-    const lines = [];
-    if (items.length) {
-      for (const it of items) {
-        const h = (it.hours != null) ? ` • ${it.hours}h` : "";
-        const r = (it.rate != null) ? ` @ ${it.rate.toFixed(2)}` : "";
-        const a = (it.amount != null) ? ` = $${it.amount.toFixed(2)}` : "";
-        lines.push(`- ${it.desc}${h}${r}${a}`);
+      const text = item.text;
+      const wellNameRaw = extractWellName(text);
+      const wellName = wellNameRaw || "(Unknown Well)";
+      const date = extractDate(text);
+      const descLines = extractDescriptionLines(text);
+
+      // Parse general info
+      const { general, extraNote } = parseGeneralFromLines(descLines);
+
+      // map/merge to a well
+      const byKey = wellsNow.reduce((acc, w) => {
+        acc[norm(w.name)] = w;
+        return acc;
+      }, {});
+      let target = byKey[norm(wellName)];
+
+      if (!target) {
+        const id = `well-${slugify(wellName) || Date.now()}-${Date.now()
+          .toString()
+          .slice(-4)}`;
+        target = addWell({
+          id,
+          name: wellName,
+          location: "",
+          pumpType: "Unknown",
+          records: [],
+        });
       }
+
+      // merge general box (only fields we discovered)
+      if (Object.keys(general).length) {
+        updateWell(target.id, { general });
+      }
+
+      // add record
+      const notesParts = [];
+      if (date) notesParts.push(`Invoice date: ${date}`);
+      if (extraNote) notesParts.push(extraNote);
+      notesParts.push(shortNotes(descLines));
+
+      addRecord(target.id, {
+        kind: "service",
+        date: date || new Date().toISOString().slice(0, 10),
+        by: "Invoice OCR",
+        notes: notesParts.filter(Boolean).join(" • "),
+      });
     }
-    if (total) lines.push(`TOTAL: $${total.toFixed(2)}`);
-    if (wellRecord) lines.push(`Well record: ${wellRecord}`);
 
-    const note = lines.join("\n");
-    addRecord(wellId, {
-      kind: "service",
-      date: date || new Date().toISOString().slice(0, 10),
-      notes: note,
-      by: "Invoice OCR",
-    });
-
-    alert(`Saved record to "${wellName}".`);
-  }
-
-  function commitAll() {
-    for (const r of results) {
-      if (!r?.parsed || r.error) continue;
-      commitOne(r.parsed);
-    }
+    alert("Import complete. Open each well to review and adjust.");
+    setBusy(false);
   }
 
   return (
     <div className="space-y-4">
       <h2 className="text-xl font-semibold">Invoice Import (OCR)</h2>
+      <p className="text-sm text-gray-600">
+        Drop PDF / PNG / JPG invoices. We’ll OCR, locate the WELL name, add a
+        record, and auto-fill rods/tubing/polish/liner when it’s present in the
+        description. You can always edit later in Well Details → General Info.
+      </p>
 
-      <div className="card space-y-3">
-        <div className="text-sm">
-          Upload clear **JPG/PNG** invoices. This importer looks for <b>WELL</b> (line after it is
-          treated as the well name), the <b>DATE</b>, and the work description table. It will add a
-          single <i>Service</i> record to the matching well (or create a new well if none matches).
-        </div>
-        <input
-          type="file"
-          multiple
-          accept="image/*"
-          onChange={onSelect}
-          className="block w-full"
-        />
-        <div className="flex gap-2">
-          <button className="btn btn-outline" disabled={!files.length || busy} onClick={process}>
-            {busy ? "Processing…" : "Run OCR"}
-          </button>
-          <button className="btn btn-primary" disabled={!results.length || busy} onClick={commitAll}>
-            Save all to wells
-          </button>
-        </div>
+      <input
+        type="file"
+        multiple
+        accept=".pdf,.png,.jpg,.jpeg"
+        onChange={onPick}
+      />
+
+      <div className="flex gap-2">
+        <button
+          className="btn btn-primary"
+          onClick={importAll}
+          disabled={!queue.length || busy}
+        >
+          {busy ? "Working…" : "Import"}
+        </button>
+        <button
+          className="btn btn-outline"
+          onClick={() => setQueue([])}
+          disabled={!queue.length || busy}
+        >
+          Clear
+        </button>
       </div>
 
-      {!!results.length && (
-        <div className="space-y-3">
-          {results.map((r, i) => (
-            <div key={i} className="card">
-              <div className="flex items-center justify-between mb-2">
-                <div className="font-medium">{r.fileName}</div>
-                {!r.error && (
-                  <button className="btn btn-outline btn-xs" onClick={() => commitOne(r.parsed)}>
-                    Save this one
-                  </button>
-                )}
+      {queue.length > 0 && (
+        <div className="grid sm:grid-cols-2 gap-3">
+          {queue.map((q, i) => (
+            <div key={i} className="card text-sm">
+              <div className="font-medium">{q.file?.name}</div>
+              <div className="text-xs opacity-60 mb-1">
+                {q.status === "ok" ? "OCR ok" : "OCR failed"}
               </div>
-
-              {r.error ? (
-                <div className="text-sm text-red-600">{r.error}</div>
-              ) : (
-                <>
-                  <div className="text-sm">
-                    <div><b>WELL:</b> {r.parsed.wellName || "—"}</div>
-                    <div><b>Date:</b> {r.parsed.date || "—"}</div>
-                    <div><b>Items:</b> {r.parsed.items.length}</div>
-                    <div><b>Total:</b> {r.parsed.total ? `$${r.parsed.total.toFixed(2)}` : "—"}</div>
-                    {r.parsed.wellRecord && <div className="mt-1"><b>Well record:</b> {r.parsed.wellRecord}</div>}
-                  </div>
-
-                  {r.parsed.items.length > 0 && (
-                    <div className="mt-3">
-                      <div className="font-medium mb-1">Parsed line items</div>
-                      <ul className="space-y-1 text-sm">
-                        {r.parsed.items.map((it, k) => (
-                          <li key={k} className="border rounded-md p-2">
-                            <div className="font-medium">{it.desc}</div>
-                            <div className="text-xs text-gray-600">
-                              {it.hours != null && <>Hours: {it.hours} • </>}
-                              {it.rate != null && <>Rate: ${it.rate.toFixed(2)} • </>}
-                              {it.amount != null && <>Amount: ${it.amount.toFixed(2)}</>}
-                            </div>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  <details className="mt-3">
-                    <summary className="cursor-pointer text-sm text-gray-600">Show raw OCR text</summary>
-                    <pre className="mt-2 text-xs whitespace-pre-wrap">{r.text}</pre>
-                  </details>
-                </>
-              )}
+              <pre className="whitespace-pre-wrap text-xs max-h-60 overflow-auto">
+                {q.text.slice(0, 3000)}
+              </pre>
             </div>
           ))}
         </div>
