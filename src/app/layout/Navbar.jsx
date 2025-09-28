@@ -1,4 +1,3 @@
-// src/app/layout/Navbar.jsx
 import React, { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { getProfile } from "../../features/profile/lib/profile.js";
@@ -38,6 +37,7 @@ export default function Navbar() {
 
         <nav className="flex items-center gap-4 text-sm">
           <Link to="/dashboard">Dashboard</Link>
+          <Link to="/import">Import</Link>
           <Link to="/board">Board</Link>
           <Link to="/viewer">Viewer</Link>
           <Link to="/scan">Scan</Link>
