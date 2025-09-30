@@ -18,7 +18,7 @@ import ReadOnlyDashboard from "../features/dashboard/pages/ReadOnlyDashboard.jsx
 import Board from "../features/board/pages/Board.jsx";
 
 import InvoiceImport from "../features/import/pages/InvoiceImport.jsx";
-
+import WellsImporter from "../features/import/WellsImporter.jsx";
 import { useAuth } from "../shared/auth.jsx"; // named import, file name/case matters on Netlify
 
 function RequireAuth({ children }) {
@@ -66,6 +66,7 @@ export default function App() {
             <Route path="/punch" element={<RequireAuth><Punch /></RequireAuth>} />
             <Route path="/timebook" element={<RequireAuth><Timebook /></RequireAuth>} />
             <Route path="/punch-codes" element={<RequireAuth><PunchCodes /></RequireAuth>} />
+            <Route path="/import/isgs" element={<WellsImporter />} />
 
             <Route path="/board" element={<RequireAuth><Board /></RequireAuth>} />
             <Route path="/settings" element={<RequireAuth><Settings /></RequireAuth>} />

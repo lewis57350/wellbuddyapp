@@ -1,4 +1,4 @@
-// src/features/board/pages/Board.jsx
+﻿// src/features/board/pages/Board.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { db, auth } from "../../../shared/firebase.js";
@@ -123,7 +123,7 @@ export default function Board() {
     const base = [{ id: "general", label: "General (Company-wide)" }];
     const wellCh = wells.map((w) => ({
       id: `well:${w.id}`,
-      label: `Well • ${w.name}`,
+      label: `Well * ${w.name}`,
     }));
     return [...base, ...wellCh];
   }, [wells]);
@@ -135,7 +135,7 @@ export default function Board() {
           <div className="font-semibold">Message Board</div>
           {myProfile?.companyName && (
             <div className="text-sm text-gray-600">
-              · {myProfile.companyName}
+              Â· {myProfile.companyName}
             </div>
           )}
         </div>
@@ -161,7 +161,7 @@ export default function Board() {
         <textarea
           rows={3}
           className="w-full border rounded-md px-3 py-2"
-          placeholder="Type your message…"
+          placeholder="Type your messageâ€¦"
           value={text}
           onChange={(e) => setText(e.target.value)}
         />
@@ -173,7 +173,7 @@ export default function Board() {
               "Anonymous"}
           </div>
           <button className="btn btn-primary" disabled={posting}>
-            {posting ? "Posting…" : "Post"}
+            {posting ? "Postingâ€¦" : "Post"}
           </button>
         </div>
       </form>
@@ -197,10 +197,10 @@ export default function Board() {
                       {m.text}
                     </div>
                     <div className="text-xs text-gray-500 mt-1">
-                      {m.byName || "Anonymous"} ·{" "}
+                      {m.byName || "Anonymous"} Â·{" "}
                       {m.createdAt?.toDate
                         ? m.createdAt.toDate().toLocaleString()
-                        : "pending…"}
+                        : "pendingâ€¦"}
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
@@ -230,3 +230,4 @@ export default function Board() {
     </div>
   );
 }
+

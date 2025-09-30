@@ -78,24 +78,34 @@ export function addWell(well) {
 }
 
 export function updateWell(id, patch) {
-  const wells = read();
+  const wells = read(); // or getWells()
   const i = wells.findIndex((w) => w.id === id);
-  if (i === -1) return null;
+  if (i === -1) return;
 
+  const prev = wells[i];
   const next = {
-    ...wells[i],
+    ...prev,
     ...patch,
-    general: { ...wells[i].general, ...(patch?.general || {}) },
-    status: { ...wells[i].status, ...(patch?.status || {}) },
   };
-
-  if (patch?.coords)   next.coords = sanitizeCoords(patch.coords);
-  if (patch?.priority) next.priority = normalizePriority(patch.priority);
-
+  if (patch?.general) {
+    const GENERAL_DEFAULT = {
+      engineSize: "",
+      unitMakeModel: "",
+      bridalCable: "",
+      polishRods: "",
+      linerSize: "",
+      packing: "",
+      rods: "",
+      tubing: "",
+      notes: "",
+    };
+    next.general = { ...GENERAL_DEFAULT, ...(prev.general || {}), ...patch.general };
+  }
   wells[i] = next;
-  write(wells);
+  write(wells); // or saveWells(wells)
   return next;
 }
+
 
 export function deleteWell(id) {
   write(read().filter((w) => w.id !== id));

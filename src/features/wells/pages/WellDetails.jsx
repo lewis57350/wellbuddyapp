@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+﻿import React, { useEffect, useMemo, useState } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import { getWell, updateWell, addRecord, deleteRecord } from "../lib/storage.js";
 import QRCodeDisplay from "../components/QRCodeDisplay.jsx";
@@ -77,7 +77,7 @@ export default function WellDetails() {
     [records, filter]
   );
 
-  if (loading) return <div>Loading…</div>;
+  if (loading) return <div>Loadingâ€¦</div>;
 
   if (!well) {
     return (
@@ -156,7 +156,7 @@ export default function WellDetails() {
       {/* Top bar */}
       <div className="flex items-center justify-between gap-3">
         <Link to="/dashboard" className="text-sm text-blue-600 hover:underline">
-          ← Back
+          â† Back
         </Link>
         <div className="flex items-center gap-2">
           <Link to={`/well/${well.id}/sheet`} className="btn btn-outline btn-sm">
@@ -172,7 +172,7 @@ export default function WellDetails() {
             <div className="min-w-0">
               <h2 className="text-2xl font-semibold truncate">{well.name}</h2>
               <div className="text-gray-600 dark:text-gray-300">
-                {well.location || "—"} • {well.pumpType || "Unknown"}
+                {well.location || "-"} {" * "} {well.pumpType || "Unknown"}
               </div>
             </div>
             <div className="flex items-center gap-3">
@@ -251,18 +251,18 @@ export default function WellDetails() {
 
         {!editGeneral ? (
           <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
-            <DisplayRow label="ENGINE SIZE" value={well.general?.engineSize || "—"} />
-            <DisplayRow label="UNIT (MAKE/MODEL)" value={well.general?.unitMakeModel || "—"} />
-            <DisplayRow label="BRIDAL CABLE SIZE (Length)"  value={well.general?.bridalCable || "—"} />
-            <DisplayRow label="POLISH RODS SIZE (length)" value={well.general?.polishRods || "—"} />
-            <DisplayRow label={'LINER SIZE (L\' x I.D" x O.D")'} value={well.general?.linerSize || "—"} />
-            <DisplayRow label="PACKING (TYPE/SIZE)" value={well.general?.packing || "—"} />
-            <DisplayRow label="RODS (COUNT/SIZE)" value={well.general?.rods || "—"} />
-            <DisplayRow label="TUBING (COUNT/SIZE)" value={well.general?.tubing || "—"} />
+            <DisplayRow label="ENGINE SIZE" value={well.general?.engineSize || "-"} />
+            <DisplayRow label="UNIT (MAKE/MODEL)" value={well.general?.unitMakeModel || "-"} />
+            <DisplayRow label="BRIDAL CABLE SIZE (Length)"  value={well.general?.bridalCable || "-"} />
+            <DisplayRow label="POLISH RODS SIZE (length)" value={well.general?.polishRods || "-"} />
+            <DisplayRow label={'LINER SIZE (L\' x I.D" x O.D")'} value={well.general?.linerSize || "-"} />
+            <DisplayRow label="PACKING (TYPE/SIZE)" value={well.general?.packing || "-"} />
+            <DisplayRow label="RODS (COUNT/SIZE)" value={well.general?.rods || "-"} />
+            <DisplayRow label="TUBING (COUNT/SIZE)" value={well.general?.tubing || "-"} />
             <div className="sm:col-span-2">
               <div className="text-gray-500">NOTES</div>
               <div className="border rounded-md p-3 min-h-[80px] whitespace-pre-wrap">
-                {well.general?.notes || "—"}
+                {well.general?.notes || "-"}
               </div>
             </div>
           </div>
@@ -430,7 +430,7 @@ export default function WellDetails() {
                       {r.kind}
                     </span>
                     <span className="font-medium">{r.date}</span>
-                    <span className="text-gray-500"> • {r.by}</span>
+                    <span className="text-gray-500"> {" * "} {r.by}</span>
                   </div>
                   {r.notes && <div className="text-sm text-gray-700 mt-1">{r.notes}</div>}
                 </div>
@@ -522,3 +522,5 @@ function CoordsEditor({ well, onSaved }) {
     </div>
   );
 }
+
+

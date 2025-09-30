@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+﻿import React, { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { getProfile } from "../../features/profile/lib/profile.js";
 import { getDashboard, setTheme } from "../../features/dashboard/lib/dashStorage.js";
@@ -34,6 +34,7 @@ export default function Navbar() {
             : <img src="/favicon.svg" alt="" className="h-7 w-7" />}
           <span>{profile.companyName || "WellBuddyApp"}</span>
         </Link>
+        <li><Link to="/import/isgs">Import â†' ISGS</Link></li>
 
         <nav className="flex items-center gap-4 text-sm">
           <Link to="/dashboard">Dashboard</Link>

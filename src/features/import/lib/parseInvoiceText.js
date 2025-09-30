@@ -1,4 +1,4 @@
-// src/features/import/lib/parseInvoiceText.js
+﻿// src/features/import/lib/parseInvoiceText.js
 // Extracts well name, date, useful "General Well Info" from OCR'd invoice text.
 
 function toISO(mdY) {
@@ -55,7 +55,7 @@ export function parseInvoiceText(raw) {
         .map((s) => s.trim())
         .filter(Boolean)
         .slice(0, 12);
-      out.notes = items.join(" • ");
+      out.notes = items.join(" * ");
       out.general.notes = out.notes;
     }
   }
@@ -65,7 +65,7 @@ export function parseInvoiceText(raw) {
   // Rods: "137 5/8's rods", "54 x 3/4\" rods"
   for (const ln of lines) {
     let m =
-      ln.match(/(\d{1,4})\s*([0-9/.\-]+)\s*(?:['’]s)?\s*rods?\b/) ||
+      ln.match(/(\d{1,4})\s*([0-9/.\-]+)\s*(?:['â€™]s)?\s*rods?\b/) ||
       ln.match(/(\d{1,4})\s*x\s*([0-9/.\-]+)"\s*rods?\b/);
     if (m) {
       out.general.rods = `${m[1]} x ${m[2]}"`;
@@ -88,7 +88,7 @@ export function parseInvoiceText(raw) {
 
   // Liner size: "8' x 1.75\" x 2.00\"" style
   for (const ln of lines) {
-    const m = ln.match(/(\d+)\s*['’]\s*x\s*([0-9/.\-]+)"\s*x\s*([0-9/.\-]+)"/);
+    const m = ln.match(/(\d+)\s*['â€™]\s*x\s*([0-9/.\-]+)"\s*x\s*([0-9/.\-]+)"/);
     if (m) {
       out.general.linerSize = `${m[1]}' x ${m[2]}" x ${m[3]}"`;
       break;
@@ -97,7 +97,7 @@ export function parseInvoiceText(raw) {
 
   // Polish rods: 'polish rod ... 1-1/8" x 24''
   for (const ln of lines) {
-    const m = ln.match(/polish\s*rod[s]?[^\d]*([0-9/.\-]+)"\s*x\s*(\d+)\s*['’]/);
+    const m = ln.match(/polish\s*rod[s]?[^\d]*([0-9/.\-]+)"\s*x\s*(\d+)\s*['â€™]/);
     if (m) {
       out.general.polishRods = `${m[1]}" x ${m[2]}'`;
       break;
@@ -117,3 +117,4 @@ export function parseInvoiceText(raw) {
 
   return out;
 }
+

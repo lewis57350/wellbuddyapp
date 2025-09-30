@@ -1,4 +1,4 @@
-// src/features/time/pages/Timebook.jsx
+﻿// src/features/time/pages/Timebook.jsx
 import React, { useMemo, useState } from "react";
 import { getPunches, exportCsv, clearPunches } from "../lib/timestorage.js";
 
@@ -20,7 +20,7 @@ export default function Timebook() {
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-semibold">Timebook</h2>
         <div className="flex gap-2">
-          <input className="border rounded-md px-3 py-2 text-sm" placeholder="Search…"
+          <input className="border rounded-md px-3 py-2 text-sm" placeholder="Searchâ€¦"
                  value={q} onChange={(e)=>setQ(e.target.value)} />
           <button className="btn btn-outline" onClick={()=>exportCsv(filtered)}>Export CSV</button>
           <button className="btn btn-outline" onClick={() => { if (confirm("Clear all punches?")) { clearPunches(); setRows([]); } }}>
@@ -48,11 +48,11 @@ export default function Timebook() {
                 <td className="py-2 pr-4 whitespace-nowrap">{new Date(r.timestamp).toLocaleString()}</td>
                 <td className="py-2 pr-4">{r.employeeName || r.employeeId}</td>
                 <td className="py-2 pr-4 uppercase">{r.action}</td>
-                <td className="py-2 pr-4">{r.siteId || "—"}</td>
+                <td className="py-2 pr-4">{r.siteId || "-"}</td>
                 <td className="py-2 pr-4">
-                  {r.coords ? `${r.coords.lat.toFixed(5)}, ${r.coords.lon.toFixed(5)}` : "—"}
+                  {r.coords ? `${r.coords.lat.toFixed(5)}, ${r.coords.lon.toFixed(5)}` : "-"}
                 </td>
-                <td className="py-2 pr-4">{r.coords?.accuracy ? `±${Math.round(r.coords.accuracy)}m` : "—"}</td>
+                <td className="py-2 pr-4">{r.coords?.accuracy ? `+/-${Math.round(r.coords.accuracy)}m` : "-"}</td>
                 <td className="py-2 pr-4">{r.geoStatus}</td>
               </tr>
             ))}
@@ -65,3 +65,6 @@ export default function Timebook() {
     </div>
   );
 }
+
+
+

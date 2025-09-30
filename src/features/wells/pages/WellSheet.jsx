@@ -1,4 +1,4 @@
-import React from "react";
+﻿import React from "react";
 import { useParams, Link } from "react-router-dom";
 import { getWell } from "../lib/storage.js";
 import { QRCodeCanvas } from "qrcode.react";
@@ -29,7 +29,7 @@ export default function WellSheet() {
     <div className="max-w-3xl mx-auto p-4">
       {/* Toolbar (hidden on print) */}
       <div className="no-print mb-3 flex items-center justify-between">
-        <Link to={`/well/${id}`} className="btn btn-outline text-sm">← Back to Well</Link>
+        <Link to={`/well/${id}`} className="btn btn-outline text-sm">â† Back to Well</Link>
         <button onClick={printNow} className="btn btn-primary text-sm">Print</button>
       </div>
 
@@ -39,7 +39,7 @@ export default function WellSheet() {
           <div className="flex items-center gap-3">
             <img src="/favicon.svg" alt="" className="h-8 w-8" />
             <div>
-              <div className="text-lg font-semibold">WellBuddyApp — Well Sheet</div>
+              <div className="text-lg font-semibold">WellBuddyApp â€" Well Sheet</div>
               <div className="text-xs text-gray-500">{new Date().toLocaleString()}</div>
             </div>
           </div>
@@ -119,7 +119,7 @@ export default function WellSheet() {
   );
 }
 
-function orDash(v) { return v && String(v).trim() ? v : "—"; }
+function orDash(v) { return v && String(v).trim() ? v : "-"; }
 
 function Row({ label, value, wrap }) {
   return (
@@ -141,3 +141,5 @@ function SignLine({ label }) {
     </div>
   );
 }
+
+

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useId, useMemo } from "react";
+﻿import React, { useEffect, useState, useId, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { getPullingPriority, PRIORITY_LEVELS } from "../lib/storage.js";
 
@@ -61,7 +61,7 @@ export default function InlineWellCard({ well, onSave, onDelete }) {
         priority === "high" ? "bg-purple-600 text-white" :
         priority === "medium" ? "bg-orange-500 text-black" :
         "bg-yellow-400 text-black";
-      return <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-semibold ${cls}`}>Pulling • {txt}</span>;
+      return <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-semibold ${cls}`}>Pulling * {txt}</span>;
     }
     if (workover) {
       return <span className="inline-flex items-center rounded-md bg-amber-500 text-black px-2 py-0.5 text-xs font-semibold">Spudder / Workover</span>;
@@ -69,9 +69,9 @@ export default function InlineWellCard({ well, onSave, onDelete }) {
     return <span className="inline-flex items-center rounded-md bg-emerald-600 text-white px-2 py-0.5 text-xs font-semibold">Good</span>;
   }, [pulling, workover, priority]);
 
-  // Fallbacks so info never looks “missing”
+  // Fallbacks so info never looks â€œmissingâ€
   const nameDisplay = well.name || well.id;
-  const locationDisplay = well.location || "—";
+  const locationDisplay = well.location || "-";
   const typeDisplay = well.pumpType || "Unknown";
 
   return (
@@ -82,7 +82,7 @@ export default function InlineWellCard({ well, onSave, onDelete }) {
           {nameDisplay}
         </div>
         <div className="mt-0.5 text-sm font-semibold text-slate-700 dark:text-slate-200">
-          {locationDisplay} · {typeDisplay}
+          {locationDisplay} Â· {typeDisplay}
         </div>
         <div className="mt-2">{summaryChip}</div>
       </div>
@@ -177,3 +177,7 @@ export default function InlineWellCard({ well, onSave, onDelete }) {
     </article>
   );
 }
+
+
+
+

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+﻿import React, { useState } from "react";
 import Tesseract from "tesseract.js";
 import { parseInvoiceText } from "../lib/parseInvoiceText.js";
 import {
@@ -87,7 +87,7 @@ export default function InvoiceImport() {
         applied.push({ file: r.file, action: "Skipped (no well name)" });
       }
     }
-    alert("Import complete:\n" + applied.map(a => `• ${a.file}: ${a.action}`).join("\n"));
+    alert("Import complete:\n" + applied.map(a => `* ${a.file}: ${a.action}`).join("\n"));
   }
 
   return (
@@ -97,7 +97,7 @@ export default function InvoiceImport() {
       <div className="card space-y-3">
         <input type="file" multiple accept="image/*,.pdf" onChange={onPick} />
         <button className="btn btn-primary" disabled={!files.length || busy} onClick={runOCR}>
-          {busy ? "Reading…" : "Read invoices"}
+          {busy ? "Readingâ€¦" : "Read invoices"}
         </button>
       </div>
 
@@ -109,10 +109,10 @@ export default function InvoiceImport() {
               <li key={i} className="border rounded-md p-3 text-sm">
                 <div className="flex items-center justify-between">
                   <div className="font-medium">{r.file}</div>
-                  <div>{r.date || "—"}</div>
+                  <div>{r.date || "-"}</div>
                 </div>
                 <div className="mt-1">
-                  <div><span className="text-gray-500">Well:</span> {r.wellName || "—"}</div>
+                  <div><span className="text-gray-500">Well:</span> {r.wellName || "-"}</div>
                   <div className="grid sm:grid-cols-2 gap-2 mt-1">
                     <Info k="Rods" v={r.general.rods} />
                     <Info k="Tubing" v={r.general.tubing} />
@@ -121,7 +121,7 @@ export default function InvoiceImport() {
                     <Info k="Packing" v={r.general.packing} />
                     <Info k="Engine" v={r.general.engineSize} />
                   </div>
-                  <div className="mt-1 line-clamp-3"><span className="text-gray-500">Notes:</span> {r.notes || "—"}</div>
+                  <div className="mt-1 line-clamp-3"><span className="text-gray-500">Notes:</span> {r.notes || "-"}</div>
                   <div className="mt-2 text-xs">
                     Match: {r.matchedName ? <b>{r.matchedName}</b> : <em>none</em>}
                   </div>
@@ -142,7 +142,7 @@ export default function InvoiceImport() {
 function Info({ k, v }) {
   return (
     <div>
-      <span className="text-gray-500">{k}:</span> {v || "—"}
+      <span className="text-gray-500">{k}:</span> {v || "-"}
     </div>
   );
 }
@@ -169,3 +169,5 @@ function findWellByName(name) {
   hit = wells.find((w) => target.includes(norm(w.name)) || norm(w.name).includes(target));
   return hit || null;
 }
+
+

@@ -1,4 +1,4 @@
-// src/features/time/pages/Punch.jsx
+﻿// src/features/time/pages/Punch.jsx
 import React, { useEffect, useState } from "react";
 import { useLocation, Link } from "react-router-dom";
 import { parsePunchFromUrl } from "../lib/punchFormat.js";
@@ -51,7 +51,7 @@ export default function Punch() {
   }, [loc.search]);
 
   if (result.state === "loading") {
-    return <div className="card">Recording punch… requesting location…</div>;
+    return <div className="card">Recording punchâ€¦ requesting locationâ€¦</div>;
   }
   if (result.state === "error") {
     return <div className="card text-red-600">{result.message}</div>;
@@ -64,10 +64,10 @@ export default function Punch() {
       </h2>
       <div className="text-sm opacity-80 mb-2">{new Date(p.timestamp).toLocaleString()}</div>
       <div className="text-sm">
-        Site: <b>{p.siteId || "—"}</b><br/>
+        Site: <b>{p.siteId || "-"}</b><br/>
         GPS: {" "}
         {p.coords
-          ? <>Lat {p.coords.lat?.toFixed(5)}, Lon {p.coords.lon?.toFixed(5)} (±{Math.round(p.coords.accuracy||0)}m)</>
+          ? <>Lat {p.coords.lat?.toFixed(5)}, Lon {p.coords.lon?.toFixed(5)} (Â±{Math.round(p.coords.accuracy||0)}m)</>
           : <span className="text-amber-600">not captured ({p.geoStatus})</span>}
       </div>
 
@@ -81,3 +81,5 @@ export default function Punch() {
     </div>
   );
 }
+
+
