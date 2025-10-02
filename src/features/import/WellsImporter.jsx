@@ -8,6 +8,8 @@ import {
   fetchFieldExtent,
 } from "../../lib/isgs";
 import { ensureSignedIn } from "../../lib/firebase";
+import { addWellsToMyList } from "../wells/lib/myWells.js";
+
 
 export default function WellsImporter() {
   const [county, setCounty] = useState("");
@@ -17,6 +19,7 @@ export default function WellsImporter() {
   const [busy, setBusy] = useState(false);
   const [results, setResults] = useState([]);
   const [exceeded, setExceeded] = useState(false);
+  const [alsoAddToMyList, setAlsoAddToMyList] = useState(true);
 
   // Auto-import progress
   const [autoBusy, setAutoBusy] = useState(false);
@@ -55,6 +58,16 @@ export default function WellsImporter() {
       setBusy(false);
     }
   }
+
+<label className="flex items-center gap-2 text-sm mt-2">
+  <input
+    type="checkbox"
+    checked={alsoAddToMyList}
+    onChange={e => setAlsoAddToMyList(e.target.checked)}
+  />
+  Also add to <b>My Wells</b> list
+</label>
+
 
   async function importAllOnPage() {
     if (!results.length) return;
@@ -102,14 +115,18 @@ export default function WellsImporter() {
         const packaged = [];
         for (const r of features) {
           const ps = await fetchPayStratsByAPI(r.API_NUMBER);
-          packaged.push(mapIsgsToWell(r, ps));
+          const w = (mapIsgsToWell(r, ps));
+          w.source = "imported";
+          packaged.push(w);
         }
 
         const count = await upsertWellsWithHistory(packaged);
-        total += count;
-        pageIndex += 1;
-        setAutoCount(total);
-        setAutoPages(pageIndex);
+        if (alsoAddToMyList) {
+       
+        const added = await addWellsToMyList(packaged);
+        console.log("Added to My Wells:", added);
+      }
+
 
         if (!ex) break; // last page
         // brief pause to be nice to APIs
